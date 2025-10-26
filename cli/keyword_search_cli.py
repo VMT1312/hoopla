@@ -22,14 +22,17 @@ def main() -> None:
     match args.command:
         case "search":
             print(f"Searching for: {args.query}")
-            query = args.query.translate(dictionary)
+            query = args.query.translate(dictionary).lower()
+            query = query.split()
             for movie in movies["movies"]:
-                title = movie["title"].translate(dictionary)
-                title = " ".join(title.split())
-                if query.lower() in title.lower():
-                    result.append(movie)
+                title = movie["title"].translate(dictionary).lower()
+                title = title.split()
+                for q in query:
+                    for token in title:
+                        if q in token and movie not in result:
+                            result.append(movie)
+            result = sorted(result, key=lambda x: x["id"], reverse=False)
             result = result[:6]
-            result = sorted(result, key=lambda x: x["id"], reverse=True)
             for i, movie in enumerate(result):
                 print(f"{i + 1}. {movie["title"]}\n")
         case _:
