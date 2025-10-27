@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse, json, os, string
+from internal.remove_stop_words import remove_stop_words
+from nltk.stem import PorterStemmer
 
 
 def main() -> None:
@@ -19,16 +21,22 @@ def main() -> None:
 
     dictionary = str.maketrans(string.punctuation, " " * len(string.punctuation))
 
+    stemmer = PorterStemmer()
+
     match args.command:
         case "search":
             print(f"Searching for: {args.query}")
             query = args.query.translate(dictionary).lower()
             query = query.split()
+            query = remove_stop_words(query)
             for movie in movies["movies"]:
                 title = movie["title"].translate(dictionary).lower()
                 title = title.split()
+                title = remove_stop_words(title)
                 for q in query:
+                    q = stemmer.stem(q)
                     for token in title:
+                        token = stemmer.stem(token)
                         if q in token and movie not in result:
                             result.append(movie)
             result = sorted(result, key=lambda x: x["id"], reverse=False)
