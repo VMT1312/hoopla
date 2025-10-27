@@ -12,3 +12,6 @@ uv.lock
 
 # Data folders
 data/
+
+#  Cache folders
+cache/
