@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 
-import argparse, json, os, string
-from internal.remove_stop_words import remove_stop_words
-from nltk.stem import PorterStemmer
+import argparse
+import os
+import json
+from internal.tokenise import search_movies
+from internal.inverted_index import InvertedIndex
+
+with open(os.path.join("data", "movies.json"), encoding="utf-8") as f:
+    movies = json.load(f)["movies"]
 
 
 def main() -> None:
@@ -12,37 +17,28 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
 
+    search_parser = subparsers.add_parser("build", help="Build inverted index")
+
     args = parser.parse_args()
-
-    with open(os.path.join("data", "movies.json"), encoding="utf-8") as f:
-        movies = json.load(f)
-
-    result = []
-
-    dictionary = str.maketrans(string.punctuation, " " * len(string.punctuation))
-
-    stemmer = PorterStemmer()
 
     match args.command:
         case "search":
             print(f"Searching for: {args.query}")
-            query = args.query.translate(dictionary).lower()
-            query = query.split()
-            query = remove_stop_words(query)
-            for movie in movies["movies"]:
-                title = movie["title"].translate(dictionary).lower()
-                title = title.split()
-                title = remove_stop_words(title)
-                for q in query:
-                    q = stemmer.stem(q)
-                    for token in title:
-                        token = stemmer.stem(token)
-                        if q in token and movie not in result:
-                            result.append(movie)
+
+            result = search_movies(args.query, movies)
+
             result = sorted(result, key=lambda x: x["id"], reverse=False)
             result = result[:6]
             for i, movie in enumerate(result):
                 print(f"{i + 1}. {movie["title"]}\n")
+        case "build":
+            index = InvertedIndex(index=dict(), docmap=dict())
+            index.build(movies)
+            index.save()
+
+            docs = index.get_documents("merida")
+
+            print(f"First document for token 'merida' = {docs[0]}")
         case _:
             parser.print_help()
 
