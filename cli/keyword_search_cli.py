@@ -3,8 +3,7 @@
 import argparse
 import os
 import json
-from internal.tokenise import search_movies
-from internal.inverted_index import InvertedIndex
+from internal.keyword_search import tokenise, InvertedIndex, search_movies
 
 with open(os.path.join("data", "movies.json"), encoding="utf-8") as f:
     movies = json.load(f)["movies"]
@@ -21,24 +20,29 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    index = InvertedIndex(index=dict(), docmap=dict())
+
     match args.command:
         case "search":
             print(f"Searching for: {args.query}")
 
-            result = search_movies(args.query, movies)
+            try:
+                index.load()
+            except FileNotFoundError:
+                print(
+                    "Inverted index not found. Please build the index first using the 'build' command."
+                )
+                return
 
-            result = sorted(result, key=lambda x: x["id"], reverse=False)
-            result = result[:6]
-            for i, movie in enumerate(result):
-                print(f"{i + 1}. {movie["title"]}\n")
+            results = search_movies(args.query, index)
+
+            for movie in results:
+                print(f"movie id: {movie["id"]}; movie title: {movie["title"]}\n")
+
         case "build":
-            index = InvertedIndex(index=dict(), docmap=dict())
             index.build(movies)
             index.save()
 
-            docs = index.get_documents("merida")
-
-            print(f"First document for token 'merida' = {docs[0]}")
         case _:
             parser.print_help()
 
