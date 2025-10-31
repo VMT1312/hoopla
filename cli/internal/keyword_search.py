@@ -2,19 +2,30 @@ import os
 import string
 from nltk.stem import PorterStemmer
 from pickle import dump, load
+from collections import Counter
 
 
 class InvertedIndex:
-    def __init__(self, index: dict[str, set[int]], docmap: dict[int, dict]):
+    def __init__(
+        self,
+        index: dict[str, set[int]],
+        docmap: dict[int, dict],
+        term_frequencies: dict[int, Counter],
+    ):
         self.index = index
         self.docmap = docmap
+        self.term_frequencies = term_frequencies
 
     def __add_document(self, doc_id: int, text: str):
         tokens = tokenise(text)
+        if doc_id not in self.term_frequencies:
+            self.term_frequencies[doc_id] = Counter()
         for token in tokens:
             if token not in self.index:
                 self.index[token] = set()
+
             self.index[token].add(doc_id)
+            self.term_frequencies[doc_id][token] += 1
 
     def get_documents(self, term: str) -> list:
         result = []
@@ -40,6 +51,7 @@ class InvertedIndex:
 
         index_path = os.path.join(cache_path, "index.pkl")
         docmap_path = os.path.join(cache_path, "docmap.pkl")
+        term_freq_path = os.path.join(cache_path, "term_frequencies.pkl")
 
         with open(index_path, "wb") as f:
             dump(self.index, f)
@@ -47,12 +59,20 @@ class InvertedIndex:
         with open(docmap_path, "wb") as f:
             dump(self.docmap, f)
 
+        with open(term_freq_path, "wb") as f:
+            dump(self.term_frequencies, f)
+
     def load(self) -> None:
         cache_path = os.path.abspath("cache")
 
         index_path = os.path.join(cache_path, "index.pkl")
         docmap_path = os.path.join(cache_path, "docmap.pkl")
-        if not os.path.exists(index_path) or not os.path.exists(docmap_path):
+        term_freq_path = os.path.join(cache_path, "term_frequencies.pkl")
+        if (
+            not os.path.exists(index_path)
+            or not os.path.exists(docmap_path)
+            or not os.path.exists(term_freq_path)
+        ):
             raise FileNotFoundError(
                 "Inverted index files not found. Please build the index first."
             )
@@ -62,6 +82,18 @@ class InvertedIndex:
 
         with open(docmap_path, "rb") as f:
             self.docmap = load(f)
+
+        with open(term_freq_path, "rb") as f:
+            self.term_frequencies = load(f)
+
+    def get_tf(self, doc_id, term: str) -> int:
+        token = tokenise(term)
+        if len(token) != 1:
+            raise ValueError("Term must be a single token.")
+
+        token = token[0]
+
+        return self.term_frequencies.get(doc_id, Counter()).get(token, 0)
 
 
 def remove_stop_words(tokens: list[str]) -> list[str]:
@@ -79,19 +111,18 @@ def tokenise(query: str) -> list:
     tokens = tokens.split()
     tokens = remove_stop_words(tokens)
 
-    return tokens
+    stemmer = PorterStemmer()
+    stemmed_tokens = [stemmer.stem(token) for token in tokens]
+
+    return stemmed_tokens
 
 
 def search_movies(query: str, inverted_index: InvertedIndex) -> list:
-
-    stemmer = PorterStemmer()
-
     result = []
 
     tokens = tokenise(query)
-    stemmed_tokens = [stemmer.stem(token) for token in tokens]
 
-    for token in stemmed_tokens:
+    for token in tokens:
         doc_ids = inverted_index.get_documents(token)
         for i in range(6):
             try:
