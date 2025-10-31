@@ -1,5 +1,6 @@
 import os
 import string
+import math
 from nltk.stem import PorterStemmer
 from pickle import dump, load
 from collections import Counter
@@ -94,6 +95,15 @@ class InvertedIndex:
         token = token[0]
 
         return self.term_frequencies.get(doc_id, Counter()).get(token, 0)
+
+    def get_idf(self, term: str) -> float:
+        tokens = tokenise(term)
+        if len(tokens) != 1:
+            raise ValueError("term must be a single token")
+        token = tokens[0]
+        doc_count = len(self.docmap)
+        term_doc_count = len(self.index[token])
+        return math.log((doc_count + 1) / (term_doc_count + 1))
 
 
 def remove_stop_words(tokens: list[str]) -> list[str]:
