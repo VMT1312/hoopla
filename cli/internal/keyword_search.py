@@ -31,10 +31,15 @@ class InvertedIndex:
     def get_documents(self, term: str) -> list:
         result = []
 
-        term = tokenise(term)[0]
+        terms = tokenise(term)
+
+        if len(terms) != 1:
+            raise ValueError("Term must be a single token.")
+
+        term = terms[0]
 
         for key in self.index.keys():
-            if term in key:
+            if term == key:
                 result.extend(self.index[key])
 
         return sorted(result, reverse=False)
@@ -104,6 +109,11 @@ class InvertedIndex:
         doc_count = len(self.docmap)
         term_doc_count = len(self.index[token])
         return math.log((doc_count + 1) / (term_doc_count + 1))
+
+    def get_bm25_idf(self, term: str) -> float:
+        df = len(self.get_documents(term))
+
+        return math.log((len(self.docmap) - df + 0.5) / (df + 0.5) + 1)
 
 
 def remove_stop_words(tokens: list[str]) -> list[str]:

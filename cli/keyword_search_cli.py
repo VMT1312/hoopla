@@ -33,6 +33,13 @@ def main() -> None:
     tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
     tfidf_parser.add_argument("term", type=str, help="Term to get TF-IDF for")
 
+    bm25_idf_parser = subparsers.add_parser(
+        "bm25idf", help="Get BM25 IDF score for a given term"
+    )
+    bm25_idf_parser.add_argument(
+        "term", type=str, help="Term to get BM25 IDF score for"
+    )
+
     args = parser.parse_args()
 
     index = InvertedIndex(index=dict(), docmap=dict(), term_frequencies=dict())
@@ -98,6 +105,18 @@ def main() -> None:
             print(
                 f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tfidf:.2f}"
             )
+
+        case "bm25idf":
+            try:
+                index.load()
+            except FileNotFoundError:
+                print(
+                    "Inverted index not found. Please build the index first using the 'build' command."
+                )
+                return
+
+            bm25idf = index.get_bm25_idf(args.term)
+            print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
 
         case _:
             parser.print_help()
