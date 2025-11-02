@@ -3,7 +3,7 @@
 import argparse
 import os
 import json
-from internal.keyword_search import InvertedIndex, search_movies, BM25_K1
+from internal.keyword_search import InvertedIndex, search_movies, BM25_K1, BM25_B
 
 with open(os.path.join("data", "movies.json"), encoding="utf-8") as f:
     movies = json.load(f)["movies"]
@@ -48,6 +48,9 @@ def main() -> None:
     bm25_tf_parser.add_argument(
         "k1", type=float, nargs="?", default=BM25_K1, help="Tunable BM25 K1 parameter"
     )
+    bm25_tf_parser.add_argument(
+        "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
+    )
 
     args = parser.parse_args()
 
@@ -57,13 +60,7 @@ def main() -> None:
         case "search":
             print(f"Searching for: {args.query}")
 
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
             results = search_movies(args.query, index)
 
@@ -75,37 +72,19 @@ def main() -> None:
             index.save()
 
         case "tf":
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
             tf = index.get_tf(args.doc_id, args.term)
             print(tf)
 
         case "idf":
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
             idf = index.get_idf(args.term)
             print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
 
         case "tfidf":
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
             tf = index.get_tf(args.doc_id, args.term)
             idf = index.get_idf(args.term)
@@ -116,27 +95,15 @@ def main() -> None:
             )
 
         case "bm25idf":
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
             bm25idf = index.get_bm25_idf(args.term)
             print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
 
         case "bm25tf":
-            try:
-                index.load()
-            except FileNotFoundError:
-                print(
-                    "Inverted index not found. Please build the index first using the 'build' command."
-                )
-                return
+            index.load()
 
-            bm25tf = index.get_bm25_tf(args.doc_id, args.term, args.k1)
+            bm25tf = index.get_bm25_tf(args.doc_id, args.term, args.k1, args.b)
             print(
                 f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25tf:.2f}"
             )

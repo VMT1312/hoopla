@@ -1,12 +1,14 @@
 import os
 import string
 import math
+import numpy as np
 from nltk.stem import PorterStemmer
 from pickle import dump, load
 from collections import Counter
 
 
 BM25_K1 = 1.5
+BM25_B = 0.75
 
 
 class InvertedIndex:
@@ -19,9 +21,11 @@ class InvertedIndex:
         self.index = index
         self.docmap = docmap
         self.term_frequencies = term_frequencies
+        self.doc_lengths = dict()
 
     def __add_document(self, doc_id: int, text: str):
         tokens = tokenise(text)
+        self.doc_lengths[doc_id] = len(tokens)
         if doc_id not in self.term_frequencies:
             self.term_frequencies[doc_id] = Counter()
         for token in tokens:
@@ -61,6 +65,7 @@ class InvertedIndex:
         index_path = os.path.join(cache_path, "index.pkl")
         docmap_path = os.path.join(cache_path, "docmap.pkl")
         term_freq_path = os.path.join(cache_path, "term_frequencies.pkl")
+        doc_lengths_path = os.path.join(cache_path, "doc_lengths.pkl")
 
         with open(index_path, "wb") as f:
             dump(self.index, f)
@@ -71,16 +76,21 @@ class InvertedIndex:
         with open(term_freq_path, "wb") as f:
             dump(self.term_frequencies, f)
 
+        with open(doc_lengths_path, "wb") as f:
+            dump(self.doc_lengths, f)
+
     def load(self) -> None:
         cache_path = os.path.abspath("cache")
 
         index_path = os.path.join(cache_path, "index.pkl")
         docmap_path = os.path.join(cache_path, "docmap.pkl")
         term_freq_path = os.path.join(cache_path, "term_frequencies.pkl")
+        doc_lengths_path = os.path.join(cache_path, "doc_lengths.pkl")
         if (
             not os.path.exists(index_path)
             or not os.path.exists(docmap_path)
             or not os.path.exists(term_freq_path)
+            or not os.path.exists(doc_lengths_path)
         ):
             raise FileNotFoundError(
                 "Inverted index files not found. Please build the index first."
@@ -94,6 +104,9 @@ class InvertedIndex:
 
         with open(term_freq_path, "rb") as f:
             self.term_frequencies = load(f)
+
+        with open(doc_lengths_path, "rb") as f:
+            self.doc_lengths = load(f)
 
     def get_tf(self, doc_id, term: str) -> int:
         token = tokenise(term)
@@ -118,11 +131,21 @@ class InvertedIndex:
 
         return math.log((len(self.docmap) - df + 0.5) / (df + 0.5) + 1)
 
-    def get_bm25_tf(self, doc_id: int, term: str, k1: float = BM25_K1) -> float:
+    def get_bm25_tf(
+        self, doc_id: int, term: str, k1: float = BM25_K1, b: float = BM25_B
+    ) -> float:
         raw_tf = self.get_tf(doc_id, term)
-        sat_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1)
+        length_norm = (
+            1 - b + b * (self.doc_lengths[doc_id] / self.__get_avg_doc_length())
+        )
+        sat_tf = (raw_tf * (k1 + 1)) / (raw_tf + k1 * length_norm)
 
         return sat_tf
+
+    def __get_avg_doc_length(self) -> float:
+        if len(self.doc_lengths) == 0:
+            return 0.0
+        return float(np.average(list(self.doc_lengths.values())))
 
 
 def remove_stop_words(tokens: list[str]) -> list[str]:
