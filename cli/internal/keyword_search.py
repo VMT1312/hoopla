@@ -147,6 +147,26 @@ class InvertedIndex:
             return 0.0
         return float(np.average(list(self.doc_lengths.values())))
 
+    def bm25(self, doc_id: int, term: str) -> float:
+        return self.get_bm25_tf(doc_id, term) * self.get_bm25_idf(term)
+
+    def bm25_search(self, query: str, limit: int) -> dict[int, float]:
+        tokens = tokenise(query)
+        scores = dict()
+
+        for token in tokens:
+            doc_ids = self.get_documents(token)
+            for doc_id in doc_ids:
+                if doc_id not in scores:
+                    scores[doc_id] = 0
+                scores[doc_id] += self.bm25(doc_id, token)
+
+        sorted_scores = dict(
+            sorted(scores.items(), key=lambda item: item[1], reverse=True)
+        )
+
+        return dict(list(sorted_scores.items())[:limit])
+
 
 def remove_stop_words(tokens: list[str]) -> list[str]:
     with open(os.path.join("data", "stopwords.txt"), encoding="utf-8") as f:

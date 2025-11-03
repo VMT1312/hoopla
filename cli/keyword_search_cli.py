@@ -52,6 +52,14 @@ def main() -> None:
         "b", type=float, nargs="?", default=BM25_B, help="Tunable BM25 b parameter"
     )
 
+    bm25search_parser = subparsers.add_parser(
+        "bm25search", help="Search movies using full BM25 scoring"
+    )
+    bm25search_parser.add_argument("query", type=str, help="Search query")
+    bm25search_parser.add_argument(
+        "--limit", type=int, default=5, help="Number of results to return"
+    )
+
     args = parser.parse_args()
 
     index = InvertedIndex(index=dict(), docmap=dict(), term_frequencies=dict())
@@ -107,6 +115,16 @@ def main() -> None:
             print(
                 f"BM25 TF score of '{args.term}' in document '{args.doc_id}': {bm25tf:.2f}"
             )
+
+        case "bm25search":
+            index.load()
+
+            results = index.bm25_search(args.query, args.limit)
+            for i in range(len(results)):
+                movie_id, score = list(results.items())[i]
+                movie = index.docmap[movie_id]["title"]
+
+                print(f"{i + 1}. ({movie_id}) {movie} - Score: {score:.2f}\n")
 
         case _:
             parser.print_help()
