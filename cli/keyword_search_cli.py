@@ -3,7 +3,7 @@
 import argparse
 import os
 import json
-from internal.keyword_search import InvertedIndex, search_movies, BM25_K1, BM25_B
+from lib.keyword_search import InvertedIndex, search_movies, BM25_K1, BM25_B
 
 with open(os.path.join("data", "movies.json"), encoding="utf-8") as f:
     movies = json.load(f)["movies"]
