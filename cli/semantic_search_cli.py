@@ -2,7 +2,12 @@
 
 import argparse
 import numpy as np
-from lib.semantic_search import verify_model, embed_text, verify_embeddings
+from lib.semantic_search import (
+    verify_model,
+    embed_text,
+    verify_embeddings,
+    embed_query_text,
+)
 
 
 def main():
@@ -18,6 +23,12 @@ def main():
 
     subparsers.add_parser("verify_embeddings", help="Verify the document embeddings")
 
+    embedquery_parser = subparsers.add_parser(
+        "embedquery",
+        help="Generate the shape and first 5 dimensions of the query",
+    )
+    embedquery_parser.add_argument("query", type=str, help="query to be embedded")
+
     args = parser.parse_args()
 
     match args.command:
@@ -29,6 +40,9 @@ def main():
 
         case "verify_embeddings":
             verify_embeddings()
+
+        case "embedquery":
+            embed_query_text(args.query)
 
         case _:
             parser.print_help()
