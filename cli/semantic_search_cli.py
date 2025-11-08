@@ -7,7 +7,10 @@ from lib.semantic_search import (
     embed_text,
     verify_embeddings,
     embed_query_text,
+    SemanticSearch,
 )
+import os
+import json
 
 
 def main():
@@ -29,6 +32,14 @@ def main():
     )
     embedquery_parser.add_argument("query", type=str, help="query to be embedded")
 
+    search_parser = subparsers.add_parser(
+        "search", help="Search the database for similar meaning"
+    )
+    search_parser.add_argument("query", type=str, help="Query to search for")
+    search_parser.add_argument(
+        "--limit", type=int, default=5, help="The limit to return the result"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -43,6 +54,22 @@ def main():
 
         case "embedquery":
             embed_query_text(args.query)
+
+        case "search":
+            semantic_search = SemanticSearch()
+
+            movies_json_path = os.path.abspath(os.path.join("data", "movies.json"))
+            with open(movies_json_path, "r") as f:
+                movies = json.load(f)["movies"]
+
+            semantic_search.load_or_create_embeddings(movies)
+            results = semantic_search.search(args.query, args.limit)
+
+            for i in range(len(results)):
+                score, movie = results[i]
+
+                print(f"{i + 1}. {movie["title"]} (score: {score})")
+                print(f"{movie["description"]}")
 
         case _:
             parser.print_help()
