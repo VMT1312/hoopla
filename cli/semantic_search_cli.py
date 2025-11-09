@@ -40,6 +40,16 @@ def main():
         "--limit", type=int, default=5, help="The limit to return the result"
     )
 
+    chunk_parser = subparsers.add_parser(
+        "chunk", help="Help breaking down query into chunks"
+    )
+    chunk_parser.add_argument(
+        "query", type=str, help="Query to be broken down into chunks"
+    )
+    chunk_parser.add_argument(
+        "--chunk-size", type=int, help="Chunk size to break down the query", default=200
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -70,6 +80,19 @@ def main():
 
                 print(f"{i + 1}. {movie["title"]} (score: {score})")
                 print(f"{movie["description"]}")
+
+        case "chunk":
+            results = []
+            end = args.chunk_size
+
+            chunks = args.query.split()
+            for i in range(0, len(chunks), args.chunk_size):
+                results.append(" ".join(chunks[i:end]))
+                end += args.chunk_size
+
+            print(f"Chunking {len(args.query)} characters")
+            for i, result in enumerate(results):
+                print(f"{i + 1}. {result}")
 
         case _:
             parser.print_help()
