@@ -11,6 +11,7 @@ from lib.semantic_search import (
 )
 import os
 import json
+import re
 
 
 def main():
@@ -49,6 +50,25 @@ def main():
     chunk_parser.add_argument(
         "--chunk-size", type=int, help="Chunk size to break down the query", default=200
     )
+    chunk_parser.add_argument(
+        "--overlap", type=int, help="The overlap words with the following chunk."
+    )
+
+    semantic_chunk_parser = subparsers.add_parser(
+        "semantic_chunk", help="Break down query into semantic chunks"
+    )
+    semantic_chunk_parser.add_argument(
+        "query", type=str, help="Query to be broken down"
+    )
+    semantic_chunk_parser.add_argument(
+        "--max-chunk-size",
+        type=int,
+        help="Size of the chunks to be broken down",
+        default=4,
+    )
+    semantic_chunk_parser.add_argument(
+        "--overlap", type=int, help="The overlapping words of the chunks", default=0
+    )
 
     args = parser.parse_args()
 
@@ -83,14 +103,40 @@ def main():
 
         case "chunk":
             results = []
-            end = args.chunk_size
+
+            if args.overlap > 0:
+                step = args.chunk_size - args.overlap
+            else:
+                step = args.chunk_size
+
+            if args.overlap > args.chunk_size:
+                raise ValueError("Overlap should not be large than chunk size.")
 
             chunks = args.query.split()
-            for i in range(0, len(chunks), args.chunk_size):
-                results.append(" ".join(chunks[i:end]))
-                end += args.chunk_size
+            i = 0
+            while i < len(chunks):
+                results.append(" ".join(chunks[i : i + args.chunk_size]))
+                i += step
 
             print(f"Chunking {len(args.query)} characters")
+            for i, result in enumerate(results):
+                print(f"{i + 1}. {result}")
+
+        case "semantic_chunk":
+            results = []
+
+            if args.overlap > 0:
+                step = args.max_chunk_size - args.overlap
+            else:
+                step = args.max_chunk_size
+
+            sentences = re.split(r"(?<=[.!?])\s+", args.query)
+            i = 0
+            while i < len(sentences):
+                results.append(" ".join(sentences[i : i + args.max_chunk_size]))
+                i += step
+
+            print(f"Semantically chunking {len(args.query)} characters")
             for i, result in enumerate(results):
                 print(f"{i + 1}. {result}")
 
