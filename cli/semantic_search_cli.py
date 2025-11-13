@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
 import argparse
-import numpy as np
 from lib.semantic_search import (
     verify_model,
     embed_text,
     verify_embeddings,
     embed_query_text,
     SemanticSearch,
+    chunking,
+    semantic_chunking,
+    embed_chunks,
+    search_chunked,
 )
 import os
 import json
-import re
 
 
 def main():
@@ -70,6 +72,16 @@ def main():
         "--overlap", type=int, help="The overlapping words of the chunks", default=0
     )
 
+    subparsers.add_parser("embed_chunks", help="Build or load the chunked embeddings")
+
+    search_chunked_parser = subparsers.add_parser(
+        "search_chunked", help="Searching query by semantic chunking"
+    )
+    search_chunked_parser.add_argument("query", type=str, help="Query to search for")
+    search_chunked_parser.add_argument(
+        "--limit", type=int, help="The numnber of results to be printed", default=5
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -102,43 +114,17 @@ def main():
                 print(f"{movie["description"]}")
 
         case "chunk":
-            results = []
-
-            if args.overlap > 0:
-                step = args.chunk_size - args.overlap
-            else:
-                step = args.chunk_size
-
-            if args.overlap > args.chunk_size:
-                raise ValueError("Overlap should not be large than chunk size.")
-
-            chunks = args.query.split()
-            i = 0
-            while i < len(chunks):
-                results.append(" ".join(chunks[i : i + args.chunk_size]))
-                i += step
-
-            print(f"Chunking {len(args.query)} characters")
-            for i, result in enumerate(results):
-                print(f"{i + 1}. {result}")
+            chunking(args.query, args.chunk_size, args.overlap)
 
         case "semantic_chunk":
-            results = []
+            semantic_chunking(agrs.query, args.max_chunk_size, args.overlap)
 
-            if args.overlap > 0:
-                step = args.max_chunk_size - args.overlap
-            else:
-                step = args.max_chunk_size
+        case "embed_chunks":
+            embed_chunks()
+            print("Generated 72909 chunked embeddings")
 
-            sentences = re.split(r"(?<=[.!?])\s+", args.query)
-            i = 0
-            while i < len(sentences):
-                results.append(" ".join(sentences[i : i + args.max_chunk_size]))
-                i += step
-
-            print(f"Semantically chunking {len(args.query)} characters")
-            for i, result in enumerate(results):
-                print(f"{i + 1}. {result}")
+        case "search_chunked":
+            search_chunked(args.query, args.limit)
 
         case _:
             parser.print_help()
