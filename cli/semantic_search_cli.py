@@ -117,7 +117,11 @@ def main():
             chunking(args.query, args.chunk_size, args.overlap)
 
         case "semantic_chunk":
-            semantic_chunking(agrs.query, args.max_chunk_size, args.overlap)
+            results = semantic_chunking(args.query, args.max_chunk_size, args.overlap)
+            print(f"Semantically chunking {len(args.query)} characters")
+            print(results)
+            for i, result in enumerate(results):
+                print(f"{i + 1}. {result}")
 
         case "embed_chunks":
             embed_chunks()

@@ -265,15 +265,21 @@ def semantic_chunking(query, max_chunk_size, overlap):
     else:
         step = max_chunk_size
 
+    query = query.strip()
+    if query == "":
+        return []
+
+    print(query)
+
     sentences = re.split(r"(?<=[.!?])\s+", query)
+    if len(sentences) == 1 and not sentences[0].endswith((".", "!", "?")):
+        sentences = sentences[0]
+
     i = 0
     while i < len(sentences):
-        results.append(" ".join(sentences[i : i + max_chunk_size]))
+        sentence = " ".join(sentences[i : i + max_chunk_size]).strip()
+        results.append(sentence)
         i += step
-
-    # print(f"Semantically chunking {len(query)} characters")
-    # for i, result in enumerate(results):
-    #     print(f"{i + 1}. {result}")
 
     return results
 
