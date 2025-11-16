@@ -53,7 +53,7 @@ class SemanticSearch:
 
         return self.build_embeddings(documents)
 
-    def search(self, query, limit):
+    def search(self, query, limit) -> list[tuple[float, dict]]:
         result = []
 
         if self.embeddings is None:

@@ -14,9 +14,9 @@ BM25_B = 0.75
 class InvertedIndex:
     def __init__(
         self,
-        index: dict[str, set[int]],
-        docmap: dict[int, dict],
-        term_frequencies: dict[int, Counter],
+        index: dict[str, set[int]] = dict(),
+        docmap: dict[int, dict] = dict(),
+        term_frequencies: dict[int, Counter] = dict(),
     ):
         self.index = index
         self.docmap = docmap
