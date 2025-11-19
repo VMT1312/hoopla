@@ -15,3 +15,5 @@ data/
 
 #  Cache folders
 cache/
+
+.env
