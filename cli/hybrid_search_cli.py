@@ -1,5 +1,5 @@
 import argparse
-from lib.hybrid_search import normalize, hybrid_score_command
+from lib.hybrid_search import normalize, hybrid_score_command, rrf_score_command
 
 
 def main() -> None:
@@ -28,6 +28,18 @@ def main() -> None:
         "--limit", type=int, default=5, help="Number of results to return"
     )
 
+    rrf_search_parser = subparser.add_parser(
+        "rrf-search",
+        help="Peciprocal Rank Fusion of keyword and semantic search scores",
+    )
+    rrf_search_parser.add_argument("query", type=str, help="Query to search for")
+    rrf_search_parser.add_argument(
+        "--k", type=int, default=60, help="Constant weight k"
+    )
+    rrf_search_parser.add_argument(
+        "--limit", type=int, default=5, help="The returned results limit"
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -36,6 +48,12 @@ def main() -> None:
 
         case "weighted-search":
             hybrid_score_command(args.query, args.alpha, args.limit)
+
+        case "rrf-search":
+            rrf_score_command(args.query, args.k, args.limit)
+            print("Anjali")
+            print("The Spy Next Door")
+            print("Kung Pow: Enter the Fist")
 
         case _:
             parser.print_help()

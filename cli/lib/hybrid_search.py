@@ -82,7 +82,47 @@ class HybridSearch:
         return dict(list(hybrid_results.items())[:limit])
 
     def rrf_search(self, query, k, limit=10):
-        raise NotImplementedError("RRF hybrid search is not implemented yet.")
+        bm25_results = self._bm25_search(query, limit * 500)
+        semantic_results = self.semantic_search.search_chunks(query, limit * 500)
+
+        hybrid_results = {}
+        bm25_rank = 1
+        for doc_id, score in bm25_results.items():
+            if doc_id not in hybrid_results:
+                hybrid_results[doc_id] = {
+                    "title": self.documents[doc_id]["title"],
+                    # "document": self.documents[doc_id]["description"],
+                    "bm25_score": score,
+                    "semantic_score": 0,
+                    "rrf_score": rrf_score(bm25_rank, k),
+                }
+            bm25_rank += 1
+
+        for i, result in enumerate(semantic_results):
+            rank = i + 1
+            doc_id = result["id"]
+            if doc_id not in hybrid_results:
+                hybrid_results[doc_id] = {
+                    "title": self.documents[doc_id]["title"],
+                    # "document": self.documents[doc_id]["description"],
+                    "bm25_score": 0,
+                    "semantic_score": result["score"],
+                    "rrf_score": rrf_score(rank, k),
+                }
+                continue
+            else:
+                hybrid_results[doc_id]["semantic_score"] = result["score"]
+                hybrid_results[doc_id]["rrf_score"] += rrf_score(rank)
+
+        hybrid_results = dict(
+            sorted(
+                hybrid_results.items(),
+                key=lambda x: x[1]["rrf_score"],
+                reverse=True,
+            )
+        )
+
+        return dict(list(hybrid_results.items())[:limit])
 
 
 def normalize(scores: list[float]) -> list[float]:
@@ -117,6 +157,28 @@ def hybrid_score_command(query, alpha=0.5, limit=5):
     for result in hybrid_results.values():
         print(f"{i}. {result["title"]}\n")
         print(f"     Hybrid Score: {result["hybrid_score"]:.3f}\n")
+        print(
+            f"     BM25: {result["bm25_score"]:.3f}, Semantic: {result["semantic_score"]:.3f}\n"
+        )
+        # print(f"     {result["doc"]["description"]}")
+        i += 1
+
+
+def rrf_score(rank, k=60):
+    return 1 / (k + rank)
+
+
+def rrf_score_command(query, k, limit):
+    with open(os.path.join("data", "movies.json"), "r", encoding="utf-8") as f:
+        docs = json.load(f)["movies"]
+
+    hybrid_search = HybridSearch(docs)
+    hybrid_results = hybrid_search.rrf_search(query, k, limit)
+
+    i = 1
+    for result in hybrid_results.values():
+        print(f"{i}. {result["title"]}\n")
+        print(f"     RRF Score: {result["rrf_score"]:.3f}\n")
         print(
             f"     BM25: {result["bm25_score"]:.3f}, Semantic: {result["semantic_score"]:.3f}\n"
         )
