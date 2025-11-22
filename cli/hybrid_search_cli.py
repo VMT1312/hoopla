@@ -4,6 +4,7 @@ from lib.hybrid_search import (
     hybrid_score_command,
     rrf_score_command,
     enhanced_spell_rrf,
+    enhanced_rewrite_rrf,
 )
 
 
@@ -45,7 +46,10 @@ def main() -> None:
         "--limit", type=int, default=5, help="The returned results limit"
     )
     rrf_search_parser.add_argument(
-        "--enhance", type=str, choices=["spell"], help="Query enhancement method"
+        "--enhance",
+        type=str,
+        choices=["spell", "rewrite"],
+        help="Query enhancement method",
     )
 
     args = parser.parse_args()
@@ -58,10 +62,15 @@ def main() -> None:
             hybrid_score_command(args.query, args.alpha, args.limit)
 
         case "rrf-search":
-            if args.enhance == "spell":
-                enhanced_spell_rrf(args.query, args.k, args.limit)
-            else:
-                rrf_score_command(args.query, args.k, args.limit)
+            match args.enhance:
+                case "spell":
+                    enhanced_spell_rrf(args.query, args.k, args.limit)
+
+                case "rewrite":
+                    enhanced_rewrite_rrf(args.query, args.k, args.limit)
+
+                case _:
+                    rrf_score_command(args.query, args.k, args.limit)
 
         case _:
             parser.print_help()
