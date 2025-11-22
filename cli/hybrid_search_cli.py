@@ -1,5 +1,10 @@
 import argparse
-from lib.hybrid_search import normalize, hybrid_score_command, rrf_score_command
+from lib.hybrid_search import (
+    normalize,
+    hybrid_score_command,
+    rrf_score_command,
+    enhanced_spell_rrf,
+)
 
 
 def main() -> None:
@@ -39,6 +44,9 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--limit", type=int, default=5, help="The returned results limit"
     )
+    rrf_search_parser.add_argument(
+        "--enhance", type=str, choices=["spell"], help="Query enhancement method"
+    )
 
     args = parser.parse_args()
 
@@ -50,10 +58,10 @@ def main() -> None:
             hybrid_score_command(args.query, args.alpha, args.limit)
 
         case "rrf-search":
-            rrf_score_command(args.query, args.k, args.limit)
-            print("Anjali")
-            print("The Spy Next Door")
-            print("Kung Pow: Enter the Fist")
+            if args.enhance == "spell":
+                enhanced_spell_rrf(args.query, args.k, args.limit)
+            else:
+                rrf_score_command(args.query, args.k, args.limit)
 
         case _:
             parser.print_help()

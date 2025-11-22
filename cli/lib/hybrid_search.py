@@ -1,5 +1,7 @@
 import os
 import json
+from dotenv import load_dotenv
+from google import genai
 
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
@@ -184,3 +186,26 @@ def rrf_score_command(query, k, limit):
         )
         # print(f"     {result["doc"]["description"]}")
         i += 1
+
+
+def enhanced_spell_rrf(query, k, limit):
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+
+    generated_response = client.models.generate_content(
+        model="gemini-2.0-flash-001",
+        contents=f"""Fix any spelling errors in this movie search query.
+
+                    Only correct obvious typos. Don't change correctly spelled words.
+
+                    Query: "{query}"
+
+                    If no errors, return the original query.
+                    Corrected:""",
+    )
+
+    print(f"Enhanced query (spell): '{query}' -> '{generated_response.text}'\n")
+
+    rrf_score_command(generated_response.text, k, limit)
