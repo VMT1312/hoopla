@@ -177,15 +177,7 @@ def rrf_score_command(query, k, limit):
     hybrid_search = HybridSearch(docs)
     hybrid_results = hybrid_search.rrf_search(query, k, limit)
 
-    i = 1
-    for result in hybrid_results.values():
-        print(f"{i}. {result["title"]}\n")
-        print(f"     RRF Score: {result["rrf_score"]:.3f}\n")
-        print(
-            f"     BM25: {result["bm25_score"]:.3f}, Semantic: {result["semantic_score"]:.3f}\n"
-        )
-        # print(f"     {result["doc"]["description"]}")
-        i += 1
+    return hybrid_results
 
 
 def enhanced_spell_rrf(query, k, limit):
@@ -239,5 +231,33 @@ Rewritten query:""",
     )
 
     print(f"Enhanced query (rewrite): '{query}' -> '{generated_response.text}'\n")
+
+    rrf_score_command(generated_response.text, k, limit)
+
+
+def enhanced_expand_rrf(query, k, limit):
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    generated_response = client.models.generate_content(
+        model="gemini-2.0-falsh-001",
+        contents=f"""Expand this movie search query with related terms.
+
+Add synonyms and related concepts that might appear in movie descriptions.
+Keep expansions relevant and focused.
+This will be appended to the original query.
+
+Examples:
+
+- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
+- "action movie with bear" -> "action thriller bear chase fight adventure"
+- "comedy with bear" -> "comedy funny bear humor lighthearted"
+
+Query: "{query}"
+""",
+    )
+
+    print(f"Enhanced query (expand): '{query}' -> '{generated_response.text}'\n")
 
     rrf_score_command(generated_response.text, k, limit)

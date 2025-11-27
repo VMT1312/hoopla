@@ -5,6 +5,7 @@ from lib.hybrid_search import (
     rrf_score_command,
     enhanced_spell_rrf,
     enhanced_rewrite_rrf,
+    enhanced_expand_rrf,
 )
 
 
@@ -48,8 +49,13 @@ def main() -> None:
     rrf_search_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell", "rewrite"],
+        choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
+    )
+    rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual"]
     )
 
     args = parser.parse_args()
@@ -64,13 +70,29 @@ def main() -> None:
         case "rrf-search":
             match args.enhance:
                 case "spell":
-                    enhanced_spell_rrf(args.query, args.k, args.limit)
+                    hybrid_results = enhanced_spell_rrf(args.query, args.k, args.limit)
 
                 case "rewrite":
-                    enhanced_rewrite_rrf(args.query, args.k, args.limit)
+                    hybrid_results = enhanced_rewrite_rrf(args.query, args.k, args.limit)
+
+                case "enhance":
+                    hybrid_results = enhanced_expand_rrf(args.query, args.k, args.limit)
 
                 case _:
-                    rrf_score_command(args.query, args.k, args.limit)
+                    hybrid_results = rrf_score_command(args.query, args.k, args.limit)
+
+            if args.rerank_method == "individual":
+                
+
+            i = 1
+            for result in hybrid_results.values():
+                print(f"{i}. {result["title"]}\n")
+                print(f"     RRF Score: {result["rrf_score"]:.3f}\n")
+                print(
+                    f"     BM25: {result["bm25_score"]:.3f}, Semantic: {result["semantic_score"]:.3f}\n"
+                )
+                # print(f"     {result["doc"]["description"]}")
+                i += 1
 
         case _:
             parser.print_help()
