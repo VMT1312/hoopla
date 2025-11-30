@@ -6,6 +6,7 @@ from lib.hybrid_search import (
     enhanced_spell_rrf,
     enhanced_rewrite_rrf,
     enhanced_expand_rrf,
+    rerank_rrf,
 )
 
 
@@ -52,11 +53,7 @@ def main() -> None:
         choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
     )
-    rrf_search_parser.add_argument(
-        "--rerank-method",
-        type=str,
-        choices=["individual"]
-    )
+    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual"])
 
     args = parser.parse_args()
 
@@ -68,21 +65,29 @@ def main() -> None:
             hybrid_score_command(args.query, args.alpha, args.limit)
 
         case "rrf-search":
-            match args.enhance:
-                case "spell":
-                    hybrid_results = enhanced_spell_rrf(args.query, args.k, args.limit)
-
-                case "rewrite":
-                    hybrid_results = enhanced_rewrite_rrf(args.query, args.k, args.limit)
-
-                case "enhance":
-                    hybrid_results = enhanced_expand_rrf(args.query, args.k, args.limit)
-
-                case _:
-                    hybrid_results = rrf_score_command(args.query, args.k, args.limit)
-
             if args.rerank_method == "individual":
-                
+                hybrid_results = rerank_rrf(args.query, args.k, args.limit)
+            else:
+                match args.enhance:
+                    case "spell":
+                        hybrid_results = enhanced_spell_rrf(
+                            args.query, args.k, args.limit
+                        )
+
+                    case "rewrite":
+                        hybrid_results = enhanced_rewrite_rrf(
+                            args.query, args.k, args.limit
+                        )
+
+                    case "enhance":
+                        hybrid_results = enhanced_expand_rrf(
+                            args.query, args.k, args.limit
+                        )
+
+                    case _:
+                        hybrid_results = rrf_score_command(
+                            args.query, args.k, args.limit
+                        )
 
             i = 1
             for result in hybrid_results.values():

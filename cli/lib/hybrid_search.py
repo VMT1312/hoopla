@@ -2,6 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 from google import genai
+import time
 
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
@@ -17,7 +18,10 @@ class HybridSearch:
         cache_path = os.path.abspath("cache")
         index_path = os.path.join(cache_path, "index.pkl")
         if not os.path.exists(index_path):
-            self.idx.build()
+            with open(os.path.join("data", "movies.json"), "r", encoding="utf-8") as f:
+                movies = json.load(f)["movies"]
+
+            self.idx.build(movies)
             self.idx.save()
 
     def _bm25_search(self, query, limit):
@@ -241,7 +245,7 @@ def enhanced_expand_rrf(query, k, limit):
 
     client = genai.Client(api_key=api_key)
     generated_response = client.models.generate_content(
-        model="gemini-2.0-falsh-001",
+        model="gemini-2.0-flash-001",
         contents=f"""Expand this movie search query with related terms.
 
 Add synonyms and related concepts that might appear in movie descriptions.
@@ -261,3 +265,40 @@ Query: "{query}"
     print(f"Enhanced query (expand): '{query}' -> '{generated_response.text}'\n")
 
     rrf_score_command(generated_response.text, k, limit)
+
+
+def rerank_rrf(query, k, limit):
+    docs = rrf_score_command(query, k, limit * 5)
+
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    for id in docs.keys():
+        doc = docs[id]
+        generated_response = client.models.generate_content(
+            model="gemini-2.0-flash-001",
+            contents=f"""Rate how well this movie matches the search query.
+
+    Query: "{query}"
+    Movie: {doc.get("title", "")} - {doc.get("document", "")}
+
+    Consider:
+    - Direct relevance to query
+    - User intent (what they're looking for)
+    - Content appropriateness
+
+    Rate 0-10 (10 = perfect match).
+    Give me ONLY the number in your response, no other text or explanation.
+
+    Score:""",
+        )
+
+        doc["individual_score"] = int(generated_response.text)
+        time.sleep(3)
+
+    sorted_results = dict(
+        sorted(docs.items(), key=lambda d: d[1]["individual_score"], reverse=True)
+    )
+
+    return sorted_results
