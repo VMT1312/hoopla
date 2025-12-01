@@ -8,6 +8,7 @@ from lib.hybrid_search import (
     enhanced_expand_rrf,
     rerank_rrf,
     batch_rerank_rrf,
+    cross_encoder_rrf,
 )
 
 
@@ -55,7 +56,7 @@ def main() -> None:
         help="Query enhancement method",
     )
     rrf_search_parser.add_argument(
-        "--rerank-method", type=str, choices=["individual", "batch"]
+        "--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"]
     )
 
     args = parser.parse_args()
@@ -75,6 +76,11 @@ def main() -> None:
 
                     case "batch":
                         hybrid_results = batch_rerank_rrf(
+                            args.query, args.k, args.limit
+                        )
+
+                    case "cross_encoder":
+                        hybrid_results = cross_encoder_rrf(
                             args.query, args.k, args.limit
                         )
             else:

@@ -3,6 +3,7 @@ import json
 from dotenv import load_dotenv
 from google import genai
 import time
+from sentence_transformers import CrossEncoder
 
 from .keyword_search import InvertedIndex
 from .semantic_search import ChunkedSemanticSearch
@@ -332,3 +333,21 @@ Return ONLY the IDs in order of relevance (best match first). Return a valid JSO
         results[id] = docs[id]
 
     return dict(list(results.items())[:limit])
+
+
+def cross_encoder_rrf(query, k, limit):
+    docs = rrf_score_command(query, k, limit * 5)
+
+    pairs = []
+    for doc in docs.values():
+        pairs.append([query, f"{doc.get("title", "")} - {doc.get("document", "")}"])
+
+    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+    # scores is a list of numbers, one for each pair
+    scores = cross_encoder.predict(pairs)
+    for i, doc in enumerate(docs.values()):
+        doc["cross_encoder"] = scores[i]
+
+    docs = dict(sorted(docs.items(), key=lambda x: x[1]["cross_encoder"]))
+
+    return dict(list(docs.items())[:limit])
