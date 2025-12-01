@@ -302,3 +302,33 @@ def rerank_rrf(query, k, limit):
     )
 
     return sorted_results
+
+
+def batch_rerank_rrf(query, k, limit):
+    docs = rrf_score_command(query, k, limit * 5)
+
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    generated_response = client.models.generate_content(
+        model="gemini-2.0-flash-001",
+        contents=f"""Rank these movies by relevance to the search query.
+
+Query: "{query}"
+
+Movies:
+{docs}
+
+Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
+
+[75, 12, 34, 2, 1]
+""",
+    )
+
+    ranked_ids = json.loads(generated_response.text)
+    results = {}
+    for id in ranked_ids:
+        results[id] = docs[id]
+
+    return dict(list(results.items())[:limit])

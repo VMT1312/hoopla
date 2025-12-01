@@ -7,6 +7,7 @@ from lib.hybrid_search import (
     enhanced_rewrite_rrf,
     enhanced_expand_rrf,
     rerank_rrf,
+    batch_rerank_rrf,
 )
 
 
@@ -53,7 +54,9 @@ def main() -> None:
         choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
     )
-    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual"])
+    rrf_search_parser.add_argument(
+        "--rerank-method", type=str, choices=["individual", "batch"]
+    )
 
     args = parser.parse_args()
 
@@ -65,8 +68,15 @@ def main() -> None:
             hybrid_score_command(args.query, args.alpha, args.limit)
 
         case "rrf-search":
-            if args.rerank_method == "individual":
-                hybrid_results = rerank_rrf(args.query, args.k, args.limit)
+            if args.rerank_method is not None:
+                match args.rerank_method:
+                    case "individual":
+                        hybrid_results = rerank_rrf(args.query, args.k, args.limit)
+
+                    case "batch":
+                        hybrid_results = batch_rerank_rrf(
+                            args.query, args.k, args.limit
+                        )
             else:
                 match args.enhance:
                     case "spell":
