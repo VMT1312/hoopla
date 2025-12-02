@@ -1,353 +1,235 @@
 import os
-import json
-from dotenv import load_dotenv
-from google import genai
-import time
-from sentence_transformers import CrossEncoder
+from typing import Optional
 
 from .keyword_search import InvertedIndex
+from .query_enhancement import enhance_query
+from .reranking import rerank
+from .search_utils import (
+    DEFAULT_ALPHA,
+    DEFAULT_SEARCH_LIMIT,
+    RRF_K,
+    SEARCH_MULTIPLIER,
+    format_search_result,
+    load_movies,
+)
 from .semantic_search import ChunkedSemanticSearch
 
 
 class HybridSearch:
-    def __init__(self, documents):
+    def __init__(self, documents: list[dict]) -> None:
         self.documents = documents
         self.semantic_search = ChunkedSemanticSearch()
         self.semantic_search.load_or_create_chunk_embeddings(documents)
 
         self.idx = InvertedIndex()
-        cache_path = os.path.abspath("cache")
-        index_path = os.path.join(cache_path, "index.pkl")
-        if not os.path.exists(index_path):
-            with open(os.path.join("data", "movies.json"), "r", encoding="utf-8") as f:
-                movies = json.load(f)["movies"]
-
-            self.idx.build(movies)
+        if not os.path.exists(self.idx.index_path):
+            self.idx.build()
             self.idx.save()
 
-    def _bm25_search(self, query, limit):
+    def _bm25_search(self, query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict]:
         self.idx.load()
         return self.idx.bm25_search(query, limit)
 
-    def weighted_search(self, query, alpha, limit=5):
-        bm25_results = self._bm25_search(query, limit * 500)
-        scores = []
-        for score in bm25_results.values():
-            scores.append(score)
-        normalized_scores = normalize(scores)
-        i = 0
-        for doc_id in bm25_results:
-            bm25_results[doc_id] = normalized_scores[i]
-            i += 1
-
-        semantic_results = self.semantic_search.search_chunks(query, limit * 500)
-        scores = []
-        for result in semantic_results:
-            scores.append(result["score"])
-        normalized_scores = normalize(scores)
-
-        for i in range(len(semantic_results)):
-            semantic_results[i]["score"] = normalized_scores[i]
-
-        hybrid_results = {}
-
-        for doc_id, score in bm25_results.items():
-            if doc_id not in hybrid_results:
-                hybrid_results[doc_id] = {
-                    "title": self.documents[doc_id]["title"],
-                    # "document": self.documents[doc_id]["description"],
-                    "bm25_score": score,
-                    "semantic_score": 0,
-                }
-
-        for result in semantic_results:
-            doc_id = result["id"]
-            if doc_id not in hybrid_results:
-                hybrid_results[doc_id] = {
-                    "title": self.documents[doc_id]["title"],
-                    # "document": self.documents[doc_id]["description"],
-                    "bm25_score": 0,
-                    "semantic_score": result["score"],
-                }
-                continue
-            hybrid_results[doc_id]["semantic_score"] = result["score"]
-
-        for doc_id, metadata in hybrid_results.items():
-            weighted_score = hybrid_score(
-                metadata["bm25_score"], metadata["semantic_score"], alpha
-            )
-            hybrid_results[doc_id]["hybrid_score"] = weighted_score
-
-        hybrid_results = dict(
-            sorted(
-                hybrid_results.items(),
-                key=lambda x: x[1]["hybrid_score"],
-                reverse=True,
-            )
-        )
-
-        return dict(list(hybrid_results.items())[:limit])
-
-    def rrf_search(self, query, k, limit=10):
+    def weighted_search(self, query: str, alpha: float, limit: int = 5) -> list[dict]:
         bm25_results = self._bm25_search(query, limit * 500)
         semantic_results = self.semantic_search.search_chunks(query, limit * 500)
 
-        hybrid_results = {}
-        bm25_rank = 1
-        for doc_id, score in bm25_results.items():
-            if doc_id not in hybrid_results:
-                hybrid_results[doc_id] = {
-                    "title": self.documents[doc_id]["title"],
-                    # "document": self.documents[doc_id]["description"],
-                    "bm25_score": score,
-                    "semantic_score": 0,
-                    "rrf_score": rrf_score(bm25_rank, k),
-                }
-            bm25_rank += 1
+        combined = combine_search_results(bm25_results, semantic_results, alpha)
+        return combined[:limit]
 
-        for i, result in enumerate(semantic_results):
-            rank = i + 1
-            doc_id = result["id"]
-            if doc_id not in hybrid_results:
-                hybrid_results[doc_id] = {
-                    "title": self.documents[doc_id]["title"],
-                    # "document": self.documents[doc_id]["description"],
-                    "bm25_score": 0,
-                    "semantic_score": result["score"],
-                    "rrf_score": rrf_score(rank, k),
-                }
-                continue
-            else:
-                hybrid_results[doc_id]["semantic_score"] = result["score"]
-                hybrid_results[doc_id]["rrf_score"] += rrf_score(rank)
+    def rrf_search(self, query: str, k: int, limit: int = 10) -> list[dict]:
+        bm25_results = self._bm25_search(query, limit * 500)
+        semantic_results = self.semantic_search.search_chunks(query, limit * 500)
 
-        hybrid_results = dict(
-            sorted(
-                hybrid_results.items(),
-                key=lambda x: x[1]["rrf_score"],
-                reverse=True,
-            )
-        )
-
-        return dict(list(hybrid_results.items())[:limit])
+        fused = reciprocal_rank_fusion(bm25_results, semantic_results, k)
+        return fused[:limit]
 
 
-def normalize(scores: list[float]) -> list[float]:
-    if len(scores) == 0:
+def normalize_scores(scores: list[float]) -> list[float]:
+    if not scores:
         return []
 
     min_score = min(scores)
     max_score = max(scores)
-    if min_score == max_score:
-        print([1.0] * len(scores))
-        return []
 
-    results = []
-    for score in scores:
-        results.append((score - min_score) / (max_score - min_score))
+    if max_score == min_score:
+        return [1.0] * len(scores)
+
+    normalized_scores = []
+    for s in scores:
+        normalized_scores.append((s - min_score) / (max_score - min_score))
+    return normalized_scores
+
+
+def normalize_search_results(results: list[dict]) -> list[dict]:
+    scores: list[float] = []
+    for result in results:
+        scores.append(result["score"])
+
+    normalized: list[float] = normalize_scores(scores)
+    for i, result in enumerate(results):
+        result["normalized_score"] = normalized[i]
 
     return results
 
 
-def hybrid_score(bm25_score, semantic_score, alpha=0.5):
+def hybrid_score(
+    bm25_score: float, semantic_score: float, alpha: float = DEFAULT_ALPHA
+) -> float:
     return alpha * bm25_score + (1 - alpha) * semantic_score
 
 
-def hybrid_score_command(query, alpha=0.5, limit=5):
-    with open(os.path.join("data", "movies.json"), "r", encoding="utf-8") as f:
-        docs = json.load(f)["movies"]
+def combine_search_results(
+    bm25_results: list[dict], semantic_results: list[dict], alpha: float = DEFAULT_ALPHA
+) -> list[dict]:
+    bm25_normalized = normalize_search_results(bm25_results)
+    semantic_normalized = normalize_search_results(semantic_results)
 
-    hybrid_search = HybridSearch(docs)
-    hybrid_results = hybrid_search.weighted_search(query, alpha, limit)
+    combined_scores = {}
 
-    i = 1
-    for result in hybrid_results.values():
-        print(f"{i}. {result["title"]}\n")
-        print(f"     Hybrid Score: {result["hybrid_score"]:.3f}\n")
-        print(
-            f"     BM25: {result["bm25_score"]:.3f}, Semantic: {result["semantic_score"]:.3f}\n"
+    for result in bm25_normalized:
+        doc_id = result["id"]
+        if doc_id not in combined_scores:
+            combined_scores[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "bm25_score": 0.0,
+                "semantic_score": 0.0,
+            }
+        if result["normalized_score"] > combined_scores[doc_id]["bm25_score"]:
+            combined_scores[doc_id]["bm25_score"] = result["normalized_score"]
+
+    for result in semantic_normalized:
+        doc_id = result["id"]
+        if doc_id not in combined_scores:
+            combined_scores[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "bm25_score": 0.0,
+                "semantic_score": 0.0,
+            }
+        if result["normalized_score"] > combined_scores[doc_id]["semantic_score"]:
+            combined_scores[doc_id]["semantic_score"] = result["normalized_score"]
+
+    hybrid_results = []
+    for doc_id, data in combined_scores.items():
+        score_value = hybrid_score(data["bm25_score"], data["semantic_score"], alpha)
+        result = format_search_result(
+            doc_id=doc_id,
+            title=data["title"],
+            document=data["document"],
+            score=score_value,
+            bm25_score=data["bm25_score"],
+            semantic_score=data["semantic_score"],
         )
-        # print(f"     {result["doc"]["description"]}")
-        i += 1
+        hybrid_results.append(result)
+
+    return sorted(hybrid_results, key=lambda x: x["score"], reverse=True)
 
 
-def rrf_score(rank, k=60):
+def rrf_score(rank: int, k: int = RRF_K) -> float:
     return 1 / (k + rank)
 
 
-def rrf_score_command(query, k, limit):
-    with open(os.path.join("data", "movies.json"), "r", encoding="utf-8") as f:
-        docs = json.load(f)["movies"]
+def reciprocal_rank_fusion(
+    bm25_results: list[dict], semantic_results: list[dict], k: int = RRF_K
+) -> list[dict]:
+    rrf_scores = {}
 
-    hybrid_search = HybridSearch(docs)
-    hybrid_results = hybrid_search.rrf_search(query, k, limit)
+    for rank, result in enumerate(bm25_results, start=1):
+        doc_id = result["id"]
+        if doc_id not in rrf_scores:
+            rrf_scores[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "rrf_score": 0.0,
+                "bm25_rank": None,
+                "semantic_rank": None,
+            }
+        if rrf_scores[doc_id]["bm25_rank"] is None:
+            rrf_scores[doc_id]["bm25_rank"] = rank
+            rrf_scores[doc_id]["rrf_score"] += rrf_score(rank, k)
 
-    return hybrid_results
+    for rank, result in enumerate(semantic_results, start=1):
+        doc_id = result["id"]
+        if doc_id not in rrf_scores:
+            rrf_scores[doc_id] = {
+                "title": result["title"],
+                "document": result["document"],
+                "rrf_score": 0.0,
+                "bm25_rank": None,
+                "semantic_rank": None,
+            }
+        if rrf_scores[doc_id]["semantic_rank"] is None:
+            rrf_scores[doc_id]["semantic_rank"] = rank
+            rrf_scores[doc_id]["rrf_score"] += rrf_score(rank, k)
 
-
-def enhanced_spell_rrf(query, k, limit):
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    client = genai.Client(api_key=api_key)
-
-    generated_response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=f"""Fix any spelling errors in this movie search query.
-
-                    Only correct obvious typos. Don't change correctly spelled words.
-
-                    Query: "{query}"
-
-                    If no errors, return the original query.
-                    Corrected:""",
-    )
-
-    print(f"Enhanced query (spell): '{query}' -> '{generated_response.text}'\n")
-
-    rrf_score_command(generated_response.text, k, limit)
-
-
-def enhanced_rewrite_rrf(query, k, limit):
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    client = genai.Client(api_key=api_key)
-    generated_response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=f"""Rewrite this movie search query to be more specific and searchable.
-
-Original: "{query}"
-
-Consider:
-- Common movie knowledge (famous actors, popular films)
-- Genre conventions (horror = scary, animation = cartoon)
-- Keep it concise (under 10 words)
-- It should be a google style search query that's very specific
-- Don't use boolean logic
-
-Examples:
-
-- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
-- "movie about bear in london with marmalade" -> "Paddington London marmalade"
-- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
-
-Rewritten query:""",
-    )
-
-    print(f"Enhanced query (rewrite): '{query}' -> '{generated_response.text}'\n")
-
-    rrf_score_command(generated_response.text, k, limit)
-
-
-def enhanced_expand_rrf(query, k, limit):
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    client = genai.Client(api_key=api_key)
-    generated_response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=f"""Expand this movie search query with related terms.
-
-Add synonyms and related concepts that might appear in movie descriptions.
-Keep expansions relevant and focused.
-This will be appended to the original query.
-
-Examples:
-
-- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
-- "action movie with bear" -> "action thriller bear chase fight adventure"
-- "comedy with bear" -> "comedy funny bear humor lighthearted"
-
-Query: "{query}"
-""",
-    )
-
-    print(f"Enhanced query (expand): '{query}' -> '{generated_response.text}'\n")
-
-    rrf_score_command(generated_response.text, k, limit)
-
-
-def rerank_rrf(query, k, limit):
-    docs = rrf_score_command(query, k, limit * 5)
-
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    client = genai.Client(api_key=api_key)
-    for id in docs.keys():
-        doc = docs[id]
-        generated_response = client.models.generate_content(
-            model="gemini-2.0-flash-001",
-            contents=f"""Rate how well this movie matches the search query.
-
-    Query: "{query}"
-    Movie: {doc.get("title", "")} - {doc.get("document", "")}
-
-    Consider:
-    - Direct relevance to query
-    - User intent (what they're looking for)
-    - Content appropriateness
-
-    Rate 0-10 (10 = perfect match).
-    Give me ONLY the number in your response, no other text or explanation.
-
-    Score:""",
+    rrf_results = []
+    for doc_id, data in rrf_scores.items():
+        result = format_search_result(
+            doc_id=doc_id,
+            title=data["title"],
+            document=data["document"],
+            score=data["rrf_score"],
+            rrf_score=data["rrf_score"],
+            bm25_rank=data["bm25_rank"],
+            semantic_rank=data["semantic_rank"],
         )
+        rrf_results.append(result)
 
-        doc["individual_score"] = int(generated_response.text)
-        time.sleep(3)
-
-    sorted_results = dict(
-        sorted(docs.items(), key=lambda d: d[1]["individual_score"], reverse=True)
-    )
-
-    return sorted_results
+    return sorted(rrf_results, key=lambda x: x["score"], reverse=True)
 
 
-def batch_rerank_rrf(query, k, limit):
-    docs = rrf_score_command(query, k, limit * 5)
+def weighted_search_command(
+    query: str, alpha: float = DEFAULT_ALPHA, limit: int = DEFAULT_SEARCH_LIMIT
+) -> dict:
+    movies = load_movies()
+    searcher = HybridSearch(movies)
 
-    load_dotenv()
-    api_key = os.environ.get("GEMINI_API_KEY")
+    original_query = query
 
-    client = genai.Client(api_key=api_key)
-    generated_response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=f"""Rank these movies by relevance to the search query.
+    search_limit = limit
+    results = searcher.weighted_search(query, alpha, search_limit)
 
-Query: "{query}"
-
-Movies:
-{docs}
-
-Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
-
-[75, 12, 34, 2, 1]
-""",
-    )
-
-    ranked_ids = json.loads(generated_response.text)
-    results = {}
-    for id in ranked_ids:
-        results[id] = docs[id]
-
-    return dict(list(results.items())[:limit])
+    return {
+        "original_query": original_query,
+        "query": query,
+        "alpha": alpha,
+        "results": results,
+    }
 
 
-def cross_encoder_rrf(query, k, limit):
-    docs = rrf_score_command(query, k, limit * 5)
+def rrf_search_command(
+    query: str,
+    k: int = RRF_K,
+    enhance: Optional[str] = None,
+    rerank_method: Optional[str] = None,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+) -> dict:
+    movies = load_movies()
+    searcher = HybridSearch(movies)
 
-    pairs = []
-    for doc in docs.values():
-        pairs.append([query, f"{doc.get("title", "")} - {doc.get("document", "")}"])
+    original_query = query
+    enhanced_query = None
+    if enhance:
+        enhanced_query = enhance_query(query, method=enhance)
+        query = enhanced_query
 
-    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
-    # scores is a list of numbers, one for each pair
-    scores = cross_encoder.predict(pairs)
-    for i, doc in enumerate(docs.values()):
-        doc["cross_encoder"] = scores[i]
+    search_limit = limit * SEARCH_MULTIPLIER if rerank_method else limit
+    results = searcher.rrf_search(query, k, search_limit)
 
-    docs = dict(sorted(docs.items(), key=lambda x: x[1]["cross_encoder"]))
+    reranked = False
+    if rerank_method:
+        results = rerank(query, results, method=rerank_method, limit=limit)
+        reranked = True
 
-    return dict(list(docs.items())[:limit])
+    return {
+        "original_query": original_query,
+        "enhanced_query": enhanced_query,
+        "enhance_method": enhance,
+        "query": query,
+        "k": k,
+        "rerank_method": rerank_method,
+        "reranked": reranked,
+        "results": results,
+    }
