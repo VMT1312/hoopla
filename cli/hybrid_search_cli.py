@@ -5,6 +5,7 @@ from lib.hybrid_search import (
     rrf_search_command,
     weighted_search_command,
 )
+from lib.evaluate import LLM_evaluate
 
 
 def main() -> None:
@@ -55,6 +56,9 @@ def main() -> None:
         help="Reranking method",
     )
     rrf_parser.add_argument(
+        "--evaluate", action="store_true", help="Use an LLM to evaluate the results"
+    )
+    rrf_parser.add_argument(
         "--limit", type=int, default=5, help="Number of results to return (default=5)"
     )
 
@@ -86,7 +90,11 @@ def main() -> None:
                 print()
         case "rrf-search":
             result = rrf_search_command(
-                args.query, args.k, args.enhance, args.rerank_method, args.limit
+                args.query,
+                args.k,
+                args.enhance,
+                args.rerank_method,
+                args.limit,
             )
 
             if result["enhanced_query"]:
@@ -103,17 +111,30 @@ def main() -> None:
                 f"Reciprocal Rank Fusion Results for '{result['query']}' (k={result['k']}):"
             )
 
+            formatted_results = []
             for i, res in enumerate(result["results"], 1):
+                formatted_result = []
                 print(f"{i}. {res['title']}")
+                formatted_result.append(f"{i}. {res['title']}")
                 if "individual_score" in res:
                     print(f"   Rerank Score: {res.get('individual_score', 0):.3f}/10")
+                    formatted_result.append(
+                        f"   Rerank Score: {res.get('individual_score', 0):.3f}/10"
+                    )
                 if "batch_rank" in res:
                     print(f"   Rerank Rank: {res.get('batch_rank', 0)}")
+                    formatted_result.append(
+                        f"   Rerank Rank: {res.get('batch_rank', 0)}"
+                    )
                 if "crossencoder_score" in res:
                     print(
                         f"   Cross Encoder Score: {res.get('crossencoder_score', 0):.3f}"
                     )
+                    formatted_result.append(
+                        f"   Cross Encoder Score: {res.get('crossencoder_score', 0):.3f}"
+                    )
                 print(f"   RRF Score: {res.get('score', 0):.3f}")
+                formatted_result.append(f"   RRF Score: {res.get('score', 0):.3f}")
                 metadata = res.get("metadata", {})
                 ranks = []
                 if metadata.get("bm25_rank"):
@@ -124,6 +145,12 @@ def main() -> None:
                     print(f"   {', '.join(ranks)}")
                 print(f"   {res['document'][:100]}...")
                 print()
+                formatted_results.append("\n".join(formatted_result))
+
+            if args.evaluate:
+                evaluated_scores = LLM_evaluate(args.query, formatted_results)
+                for i, res in enumerate(result["results"], 1):
+                    print(f"{i}. {res["title"]}: {evaluated_scores[i-1]}/3\n")
         case _:
             parser.print_help()
 
