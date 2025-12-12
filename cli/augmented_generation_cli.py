@@ -1,7 +1,7 @@
 import argparse
 
 from lib.hybrid_search import rrf_search_command
-from lib.augmented_generation import augmented_generation
+from lib.augmented_generation import augmented_generation, summarize_command
 
 
 def main():
@@ -12,6 +12,16 @@ def main():
         "rag", help="Perform RAG (search + generate answer)"
     )
     rag_parser.add_argument("query", type=str, help="Search query for RAG")
+
+    summarise_parser = subparsers.add_parser(
+        "summarize", help="Summarization of the results"
+    )
+    summarise_parser.add_argument(
+        "query", type=str, help="Search query for summarization"
+    )
+    summarise_parser.add_argument(
+        "--limit", type=int, help="The limit of returned results", default=5
+    )
 
     args = parser.parse_args()
 
@@ -28,6 +38,17 @@ def main():
             print()
             print("RAG Response:")
             print(f"{rag_response}")
+        case "summarize":
+            query = args.query
+            limit = args.limit
+
+            summary, titles = summarize_command(query, limit)
+            print("Search Results:")
+            for title in titles:
+                print(f"    - {title}")
+            print()
+            print("LLM Summary:")
+            print(f"{summary}")
         case _:
             parser.print_help()
 
