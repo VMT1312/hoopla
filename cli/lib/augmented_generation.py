@@ -81,3 +81,50 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
         )
 
     return response.text, titles
+
+
+def citation_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> tuple[str, list]:
+    movies = load_movies()
+    searcher = HybridSearch(movies)
+
+    search_results = searcher.rrf_search(query, RRF_K, limit)
+
+    formatted_results = []
+    titles = []
+    for doc in search_results:
+        title = doc["title"]
+        document = doc["document"]
+
+        titles.append(title)
+        formatted_results.append(f"Title: {title}\nDescription: {document}")
+
+    results = "\n\n".join(formatted_results)
+    prompt = f"""Answer the question or provide information based on the provided documents.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+If not enough information is available to give a good answer, say so but give as good of an answer as you can while citing the sources you have.
+
+Query: {query}
+
+Documents:
+{results}
+
+Instructions:
+- Provide a comprehensive answer that addresses the query
+- Cite sources using [1], [2], etc. format when referencing information
+- If sources disagree, mention the different viewpoints
+- If the answer isn't in the documents, say "I don't have enough information"
+- Be direct and informative
+
+Answer:"""
+
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+    except Exception:
+        return (
+            "LLM request failed or quota exceeded, but here are some relevant movies based on your query.",
+            titles,
+        )
+
+    return response.text, titles

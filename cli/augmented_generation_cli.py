@@ -1,7 +1,11 @@
 import argparse
 
 from lib.hybrid_search import rrf_search_command
-from lib.augmented_generation import augmented_generation, summarize_command
+from lib.augmented_generation import (
+    augmented_generation,
+    summarize_command,
+    citation_command,
+)
 
 
 def main():
@@ -21,6 +25,14 @@ def main():
     )
     summarise_parser.add_argument(
         "--limit", type=int, help="The limit of returned results", default=5
+    )
+
+    citation_parser = subparsers.add_parser("citations", help="Answer with citation")
+    citation_parser.add_argument(
+        "query", type=str, help="Search query for summarised citation"
+    )
+    citation_parser.add_argument(
+        "--limit", type=int, help="The limit of returned movie titles", default=5
     )
 
     args = parser.parse_args()
@@ -49,6 +61,18 @@ def main():
             print()
             print("LLM Summary:")
             print(f"{summary}")
+        case "citations":
+            query = args.query
+            limit = args.limit
+
+            summary, titles = citation_command(query, limit)
+            print("Search Results:")
+            for title in titles:
+                print(f"    - {title}")
+            print()
+            print("LLM Summary:")
+            print(f"{summary}")
+
         case _:
             parser.print_help()
 
