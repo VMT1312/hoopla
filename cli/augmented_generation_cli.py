@@ -5,6 +5,7 @@ from lib.augmented_generation import (
     augmented_generation,
     summarize_command,
     citation_command,
+    question_command,
 )
 
 
@@ -33,6 +34,14 @@ def main():
     )
     citation_parser.add_argument(
         "--limit", type=int, help="The limit of returned movie titles", default=5
+    )
+
+    question_parser = subparsers.add_parser(
+        "question", help="Question answering based on retrieved documents"
+    )
+    question_parser.add_argument("question", type=str, help="Question to be answered")
+    question_parser.add_argument(
+        "--limit", default=5, type=int, help="The number of returned results"
     )
 
     args = parser.parse_args()
@@ -66,6 +75,17 @@ def main():
             limit = args.limit
 
             summary, titles = citation_command(query, limit)
+            print("Search Results:")
+            for title in titles:
+                print(f"    - {title}")
+            print()
+            print("LLM Summary:")
+            print(f"{summary}")
+        case "question":
+            query = args.question
+            limit = args.limit
+
+            summary, titles = question_command(query, limit)
             print("Search Results:")
             for title in titles:
                 print(f"    - {title}")

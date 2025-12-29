@@ -128,3 +128,48 @@ Answer:"""
         )
 
     return response.text, titles
+
+
+def question_command(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> tuple[str, list]:
+    movies = load_movies()
+    searcher = HybridSearch(movies)
+
+    search_results = searcher.rrf_search(query, RRF_K, limit)
+
+    formatted_results = []
+    titles = []
+    for doc in search_results:
+        title = doc["title"]
+        document = doc["document"]
+
+        titles.append(title)
+        formatted_results.append(f"Title: {title}\nDescription: {document}")
+
+    question = query
+    context = "\n\n".join(formatted_results)
+    prompt = f"""Answer the user's question based on the provided movies that are available on Hoopla.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+Question: {question}
+
+Documents:
+{context}
+
+Instructions:
+- Answer questions directly and concisely
+- Be casual and conversational
+- Don't be cringe or hype-y
+- Talk like a normal person would in a chat conversation
+
+Answer:"""
+
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+    except Exception:
+        return (
+            "LLM request failed or quota exceeded, but here are some relevant movies based on your query.",
+            titles,
+        )
+
+    return response.text, titles
